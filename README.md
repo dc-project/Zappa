@@ -26,6 +26,7 @@
     - [Advanced Scheduling](#advanced-scheduling)
   - [Undeploy](#undeploy)
   - [Package](#package)
+    - [How Zappa Makes Packages](#how-zappa-makes-packages)
   - [Template](#template)
   - [Status](#status)
   - [Tailing Logs](#tailing-logs)
@@ -307,9 +308,30 @@ You can also specify the output filename of the package with `-o`:
 
     $ zappa package production -o my_awesome_package.zip
 
+#### How Zappa Makes Packages
+
+Zappa will automatically package your active virtual environment into a package which runs on smoothly AWS Lambda.
+
+During this process, it will replace any local dependancies with AWS Lambda compatible versions. Dependencies are included in this order:
+
+  * Lambda-compatible `manylinux` wheels from a local cache
+  * Lambda-compatible `manylinux` wheels from PyPI
+  * Lambda-specific versions from [lambda-package](https://github.com/Miserlou/lambda-packages)
+  * Packages from the active virtual environment
+  * Packages from the local project directory
+
+It also skips certain unnecessary files, and ignores any .py files if .pyc files are available.
+
+In addition, Zappa will also automatically set the correct execution permissions, configure package settings, and create a unique, auditable package manifest file.
+
+To further reduce the final package file size, you can:
+
+* Set `slim_handler` to `True` to upload a small handler to Lambdas and the rest of the package to S3. For more details, see the [merged pull request](https://github.com/Miserlou/Zappa/pull/548) and the [discussion in the original issue](https://github.com/Miserlou/Zappa/issues/510). See also: [Large Projects](#large-projects).
+* Use the `exclude` setting and provide a list of regex patterns to exclude from the archive. By default, Zappa will exclude Boto, because [it's already available in the Lambda execution environment](http://docs.aws.amazon.com/lambda/latest/dg/current-supported-versions.html).
+
 ### Template
 
-Similarly, if you only want the API Gateway CloudFormation template, for use the `template` command:
+Similarly to `package`, if you only want the API Gateway CloudFormation template, for use the `template` command:
 
     $ zappa template production --l your-lambda-arn -r your-role-arn
 
@@ -388,6 +410,16 @@ _(Please note that commands which take over 30 seconds to execute may time-out. 
 Zappa can be deployed to custom domain names and subdomains with custom SSL certificates, Let's Encrypt certificates, and [AWS Certificate Manager](https://aws.amazon.com/certificate-manager/) (ACM) certificates.
 
 Currently, the easiest of these to use are the AWS Certificate Manager certificates, as they are free, self-renewing, and require the least amount of work.
+
+Once configured as described below, all of these methods use the same command:
+
+    $ zappa certify 
+
+When deploying from a CI/CD system, you can use:
+    
+    $ zappa certify --yes
+
+to skip the confirmation prompt.
 
 #### Deploying to a Domain With AWS Certificate Manager
 
@@ -706,7 +738,7 @@ to change Zappa's behavior. Use these at your own risk!
         "async_response_table": "your_dynamodb_table_name",  // the DynamoDB table name to use for captured async responses; defaults to None (can't capture)
         "async_response_table_read_capacity": 1,  // DynamoDB table read capacity; defaults to 1
         "async_response_table_write_capacity": 1,  // DynamoDB table write capacity; defaults to 1
-        "aws_endpoint_urls": { "aws_service_name": "endpoint_url" }, // a dictionary of endpoint_urls that emulate the appropriate service.  Usually used for testing.
+        "aws_endpoint_urls": { "aws_service_name": "endpoint_url" }, // a dictionary of endpoint_urls that emulate the appropriate service.  Usually used for testing, for instance with `localstack`.
         "aws_environment_variables" : {"your_key": "your_value"}, // A dictionary of environment variables that will be available to your deployed app via AWS Lambdas native environment variables. See also "environment_variables" and "remote_env" . Default {}.
         "aws_kms_key_arn": "your_aws_kms_key_arn", // Your AWS KMS Key ARN
         "aws_region": "aws-region-name", // optional, uses region set in profile or environment variables if not set here,
@@ -727,6 +759,13 @@ to change Zappa's behavior. Use these at your own risk!
         "cloudwatch_log_level": "OFF", // Enables/configures a level of logging for the given staging. Available options: "OFF", "INFO", "ERROR", default "OFF". C
         "cloudwatch_data_trace": false, // Logs all data about received events. Default false.
         "cloudwatch_metrics_enabled": false, // Additional metrics for the API Gateway. Default false.
+        "cognito": { // for Cognito event triggers
+            "user_pool": "user-pool-id", // User pool ID from AWS Cognito
+            "triggers": [{
+                "source": "PreSignUp_SignUp", // triggerSource from http://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html#cognito-user-pools-lambda-trigger-syntax-pre-signup
+                "function": "my_app.pre_signup_function"
+            }]
+        },
         "context_header_mappings": { "HTTP_header_name": "API_Gateway_context_variable" }, // A dictionary mapping HTTP header names to API Gateway context variables
         "cors": false, // Enable Cross-Origin Resource Sharing. Default false. If true, simulates the "Enable CORS" button on the API Gateway console. Can also be a dictionary specifying lists of "allowed_headers", "allowed_methods", and string of "allowed_origin"
         "dead_letter_arn": "arn:aws:<sns/sqs>:::my-topic/queue", // Optional Dead Letter configuration for when Lambda async invoke fails thrice
@@ -1214,6 +1253,7 @@ For monitoring of different deployments, a unique UUID for each package is avail
 * [Guide to using Django with Zappa](https://edgarroman.github.io/zappa-django-guide/)
 * [Apex and WWW Domains with Zappa](http://sciencestuff.xperiment.mobi/2017/08/09/apex-and-www-domains-with-pythons-zappa-https/)
 * [Zappa and LambCI](https://seancoates.com/blogs/zappa-and-lambci/)
+* [Building A Serverless Image Processing SaaS using Zappa](http://www.99serverless.com/index.php/2017/11/25/building-a-serverless-image-processing-saas/)
 * _Your guide here?_
 
 ## Zappa in the Press
